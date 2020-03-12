@@ -28,7 +28,6 @@ pca_df <-
     -station_co,
     -Substance,
     -CAS_No,
-    -CAS_No,
     -H_Unit,
     -Concentration,
     -valid_measurement
