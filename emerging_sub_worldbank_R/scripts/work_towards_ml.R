@@ -4,6 +4,7 @@ library(naniar)
 library(vtreat)
 library(ranger)
 library(xgboost)
+library(caret)
 
 # Loading data ------------------------------------------------------------
 df <- read_rds("data/modified/compact_data.rds")
@@ -106,3 +107,24 @@ mutate(df_test, residual_rf = subs_value - rf_pred,
             rmse_xgb = sqrt(mean(residual_xgb ^2)))
 
 
+# Models with caret -------------------------------------------------------
+
+# glmnet #
+glmnet_control <- trainControl(
+  method = "cv", 
+  number = 10,
+  )
+
+glmnet_grid <- expand.grid(
+  alpha = 0:1,
+  lambda = seq(0.0001, 0.1, length = 10)
+)
+
+
+glmnet_model <- train(
+  subs_value ~ ., 
+  data = df_train,
+  method = "glmnet",
+  tuneGrid = glmnet_grid,
+  trControl = glmnet_control
+)
