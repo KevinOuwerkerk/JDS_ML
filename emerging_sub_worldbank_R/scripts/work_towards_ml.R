@@ -5,6 +5,8 @@ library(vtreat)
 library(ranger)
 library(xgboost)
 library(caret)
+library(tictoc)
+library(h2o)
 
 # Loading data ------------------------------------------------------------
 df <- read_rds("data/modified/compact_data.rds")
@@ -16,6 +18,7 @@ df <- select(df, -SUBID:-Concentration, -valid_measurement, -sub_groups)
 df <- na.omit(df)
 
 # create test and training data #
+set.seed(1234)
 N <- nrow(df)
 target <- round(0.75 * N)
 gp <- runif(N)
@@ -110,21 +113,112 @@ mutate(df_test, residual_rf = subs_value - rf_pred,
 # Models with caret -------------------------------------------------------
 
 # glmnet #
-glmnet_control <- trainControl(
-  method = "cv", 
-  number = 10,
-  )
+fit_control <- trainControl(
+  method = "adaptive_cv",
+  adaptive = list(
+    min = 5,
+    alpha = 0.05,
+    method = "BT",
+    complete = TRUE
+  ),
+  number = 5,
+  repeats = 3,
+  search = "random",
+  verboseIter = TRUE,
+  allowParallel = TRUE
+)
 
 glmnet_grid <- expand.grid(
-  alpha = 0:1,
+  alpha = seq(0, 1, 0.1),
   lambda = seq(0.0001, 0.1, length = 10)
 )
 
 
+tic()
 glmnet_model <- train(
   subs_value ~ ., 
   data = df_train,
   method = "glmnet",
-  tuneGrid = glmnet_grid,
-  trControl = glmnet_control
+  tuneLength = 100,
+  trControl = fit_control
 )
+toc()
+
+# rndom forrest #
+tic()
+rf_model <- train(
+  subs_value ~ ., 
+  data = df_train,
+  method = "ranger",
+  tuneLength = 100,
+  trControl = fit_control
+)
+toc()
+
+# gradient boosting machine #
+tic()
+gbm_model <- train(
+  subs_value ~ ., 
+  data = df_train,
+  method = "gbm",
+  tuneLength = 100,
+  trControl = fit_control
+)
+toc()
+
+
+# XGBoost #
+
+xgb_control <- trainControl(
+  method = "adaptive_cv",
+  adaptive = list(
+    min = 5,
+    alpha = 0.05,
+    method = "BT",
+    complete = TRUE
+  ),
+  number = 10,
+  repeats = 3,
+  search = "random",
+  verboseIter = TRUE,
+  allowParallel = TRUE
+)
+
+
+
+tic()
+xgb_model <- train(
+  subs_value ~ ., 
+  data = as.matrix(df_train),
+  method = "xgbTree",
+  tuneLength = 100,
+  trControl = xgb_control
+)
+toc()
+
+
+
+# AutoML With H20 ---------------------------------------------------------
+
+h2o.init()
+
+df_h2o <- as.h2o(df)
+
+y <- "subs_value"
+x <- setdiff(colnames(df_h2o), y)
+
+sframe <- h2o.splitFrame(data = df_h2o, ratios = c(0.7, 0.15), seed = 1234)
+
+train <- sframe[[1]]
+valid <- sframe[[2]]
+test <- sframe[[3]]
+
+
+automl_model <- h2o.automl(x = x, 
+                           y = y,
+                           training_frame = train,
+                           validation_frame = valid,
+                           max_models = 50,
+                           sort_metric = "RMSE",
+                           nfolds = 5,
+                           seed = 1234)
