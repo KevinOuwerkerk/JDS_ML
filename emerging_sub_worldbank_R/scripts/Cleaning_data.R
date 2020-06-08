@@ -2,11 +2,12 @@
 # 2019-11-18
 
 # Loading libraries -------------------------------------------------------
-library(tidyverse)
 library(readxl)
 library(RSQLite)
 library(naniar)
 library(arrow)
+library(tidyverse)
+library(NADA)
 
 # Loading data ------------------------------------------------------------
 
@@ -175,6 +176,7 @@ data <- data[!is.na(data$subs_value), ]
 
 # calculate fraction agricultural are for each subid #
 data <- mutate(data, f_agr = area_agr / AREA)
+
 # adding flag for substances that belong to multiple groups
 data$mult_groups <- rowSums(data[,c('reach', 'pharma', 'pest')], na.rm = TRUE)
 
@@ -188,6 +190,7 @@ data <-
       1 , 0),
     pest_bin = if_else(pest == TRUE, 1 , 0, missing = 0)
   )
+
 # making on column for the groups
 data$sub_groups <- case_when(data$reach_bin == 1 ~ "reach",
                              data$pharma_bin == 1 ~ " pharma",
@@ -250,8 +253,125 @@ data <- mutate(
   )
 )
 
+
+
+# Impute censored data ----------------------------------------------------
+unique(data$Concentration)
+
+data$censored <- data$Concentration %in% c("Less than LoQ", "Less than LoD")
+
+select(data, CAS_No, censored) %>%
+  group_by(CAS_No) %>% 
+  summarise(percent = mean(censored, na.rm = TRUE),
+            n = n()) %>% 
+  arrange(desc(percent))
+
+
+select(data, CAS_No, station_co, censored) %>%
+  group_by(CAS_No, station_co) %>% 
+  summarise(percent = mean(censored, na.rm = TRUE),
+            n = n()) %>% 
+  arrange(desc(percent))
+
+
+# # total #
+# 
+# data$waarde <- data$subs_value
+# data$waarde[data$waarde == 0] <- NA
+# 
+# data_cen <- arrange(data, waarde) %>% 
+#   mutate(id = 1:nrow(data))
+# 
+# 
+# ros_mod <- ros(data$waarde, data$censored, forwardT = "log", reverseT = "exp")
+# ros_df <- as.data.frame(ros_mod)
+# 
+# ros_df <- mutate(ros_df, id = 1:nrow(ros_df)) %>% 
+#   select(-pp)
+# 
+# ros_imp <- ros_df$modeled
+# 
+# # joining the imputed values to the data #
+# data_cen <- left_join(data_cen, ros_df, by = c("id", "subs_value" = "obs", "censored")) %>% 
+#   rename(subs_value_dl = modeled)
+# 
+# # replace NA values with original # 
+# data_cen <- mutate(data_cen, subs_value_dl = case_when(is.na(subs_value_dl) ~ subs_value,
+#                                                        TRUE ~ subs_value_dl)) %>%
+#   select(-waarde, -id)
+# 
+# # data_sub$subs_value_dl <- ros_imp
+# 
+# # check if values align #
+# filter(data_cen, censored == FALSE) %>% 
+#   mutate(correct =subs_value == subs_value_dl) %>% 
+#   summarise(correct_pct = mean(correct)) 
+
+## ##
+# 
+# 
+# impute with ROS per substance #
+data_cen <- NULL
+substances <- unique(data$CAS_No)
+
+# sub <- "120-18-3"
+
+for (sub in substances) {
+
+  data_sub <- filter(data, CAS_No == sub) %>%
+    arrange(subs_value)
+
+  data_sub$waarde <- data_sub$subs_value
+  data_sub$waarde[data_sub$waarde == 0] <- NA
+
+  data_sub <- arrange(data_sub, waarde) %>%
+    mutate(id = 1:nrow(data_sub))
+  
+  if(mean(data_sub$censored) == 1){
+    
+    data_sub$subs_value_dl <- as.numeric(NA)
+    # next
+  }
+  else{
+
+  # impute #
+
+  ros_mod <- ros(data_sub$waarde, data_sub$censored, forwardT = "log", reverseT = "exp")
+  ros_df <- as.data.frame(ros_mod)
+
+  ros_df <- mutate(ros_df, id = 1:nrow(ros_df)) %>%
+    select(-pp)
+
+  ros_imp <- ros_df$modeled
+
+  # joining the imputed values to the data #
+  data_sub <- left_join(data_sub, ros_df, by = c("id", "subs_value" = "obs", "censored")) %>%
+    rename(subs_value_dl = modeled)
+  }
+
+  # replace NA values with original #
+  data_sub <- mutate(data_sub, subs_value_dl = case_when(is.na(subs_value_dl) ~ subs_value,
+                                             TRUE ~ subs_value_dl)) %>%
+    select(-waarde, -id)
+
+  # data_sub$subs_value_dl <- ros_imp
+
+  # check if values align #
+  filter(data_sub, censored == FALSE) %>%
+    mutate(correct =subs_value == subs_value_dl) %>%
+    summarise(correct_pct = mean(correct))
+
+  # binding it together #
+  data_cen <- bind_rows(data_cen, data_sub)
+
+}
+
+
 # creating intermediate datset #
 data_intermediate <- data
+
+# saving the total data with censored obs.#
+data <- data_cen
 
 # create data for later use #
 data <- select(
@@ -300,6 +420,9 @@ data <- select(
   )
 
 #miss_var_summary(data)
+
+
+
 
 # Writing data to disk ----------------------------------------------------
 

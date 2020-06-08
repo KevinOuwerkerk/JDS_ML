@@ -126,7 +126,7 @@ fit_control <- trainControl(
   search = "random",
   verboseIter = TRUE,
   allowParallel = TRUE
-)
+ )
 
 glmnet_grid <- expand.grid(
   alpha = seq(0, 1, 0.1),
@@ -139,6 +139,7 @@ glmnet_model <- train(
   subs_value ~ ., 
   data = df_train,
   method = "glmnet",
+  preProcess = "pca",
   tuneLength = 100,
   trControl = fit_control
 )
@@ -161,7 +162,7 @@ gbm_model <- train(
   subs_value ~ ., 
   data = df_train,
   method = "gbm",
-  tuneLength = 100,
+  tuneLength = 300,
   trControl = fit_control
 )
 toc()
@@ -191,7 +192,7 @@ xgb_model <- train(
   subs_value ~ ., 
   data = as.matrix(df_train),
   method = "xgbTree",
-  tuneLength = 100,
+  tuneLength = 300,
   trControl = xgb_control
 )
 toc()
@@ -222,3 +223,7 @@ automl_model <- h2o.automl(x = x,
                            sort_metric = "RMSE",
                            nfolds = 5,
                            seed = 1234)
+
+
+
+
