@@ -253,25 +253,36 @@ data <- mutate(
   )
 )
 
-
+data <- mutate(
+  data,
+  Concentration = if_else(subs_value == 0,
+                          "Less than LoD",
+                          Concentration, missing =  Concentration)
+)
 
 # Impute censored data ----------------------------------------------------
 unique(data$Concentration)
 
 data$censored <- data$Concentration %in% c("Less than LoQ", "Less than LoD")
 
-select(data, CAS_No, censored) %>%
+(frac_censored <- select(data, CAS_No, censored) %>%
   group_by(CAS_No) %>% 
   summarise(percent = mean(censored, na.rm = TRUE),
             n = n()) %>% 
-  arrange(desc(percent))
-
+  arrange(desc(percent)))
 
 select(data, CAS_No, station_co, censored) %>%
   group_by(CAS_No, station_co) %>% 
   summarise(percent = mean(censored, na.rm = TRUE),
             n = n()) %>% 
   arrange(desc(percent))
+
+# select substances with lower then 80 percent of the values below dl 
+valid_subs <- filter(frac_censored, percent < 0.8)
+valid_subs <- valid_subs$CAS_No
+
+# filter data with substances with less then 80 percent of the values below dl #
+data <- filter(data, CAS_No %in% valid_subs)
 
 
 # # total #
@@ -358,7 +369,7 @@ for (sub in substances) {
 
   # check if values align #
   filter(data_sub, censored == FALSE) %>%
-    mutate(correct =subs_value == subs_value_dl) %>%
+    mutate(correct = subs_value == subs_value_dl) %>%
     summarise(correct_pct = mean(correct))
 
   # binding it together #

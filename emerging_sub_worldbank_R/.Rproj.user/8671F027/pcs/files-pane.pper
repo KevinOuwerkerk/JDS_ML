@@ -1,9 +1,9 @@
 {
-    "path" : "P:/1209104-solutions/JDS_ML/github_repo_JDS_ML/JDS_ML/emerging_sub_worldbank_R/data",
-    "sortOrder" : [
+    "path": "P:/1209104-solutions/JDS_ML/github_repo_JDS_ML/JDS_ML/emerging_sub_worldbank_R/data",
+    "sortOrder": [
         {
-            "ascending" : true,
-            "columnIndex" : 2
+            "ascending": true,
+            "columnIndex": 2
         }
     ]
 }

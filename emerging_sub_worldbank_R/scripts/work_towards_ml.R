@@ -9,12 +9,13 @@ library(tictoc)
 library(h2o)
 
 # Loading data ------------------------------------------------------------
-df <- read_rds("data/modified/compact_data.rds")
+df <- read_rds("data/modified/compact_data.rds") %>% 
+  select(-subs_value) # temporary 
 
 # Cleaning data for feature table #   
 df <- select(df, -SUBID:-Concentration, -valid_measurement, -sub_groups)
 
-# first test removing al missing values (for now) #
+# first test removing all missing values (for now) #
 df <- na.omit(df)
 
 # create test and training data #
@@ -32,7 +33,7 @@ nRows <- nrow(df)
 splitPlan <- kWayCrossValidation(nRows, 3, NULL, NULL)
 
 
-fmla <- as.formula("subs_value ~ .")
+fmla <- as.formula("subs_value_dl ~ .")
 
 # test model  random forrest #
 (subs_model_rf <-
@@ -46,11 +47,11 @@ fmla <- as.formula("subs_value ~ .")
 df_test$rf_pred <- predict(subs_model_rf, df_test)$predictions
 
 # RMSE on test data
-mutate(df_test, residual = subs_value - rf_pred) %>% 
+mutate(df_test, residual = subs_value_dl - rf_pred) %>% 
   summarise(rmse = sqrt(mean(residual ^2)))
 
 # plot model performance
-ggplot(df_test, aes(x = rf_pred, y = subs_value)) + 
+ggplot(df_test, aes(x = rf_pred, y = subs_value_dl)) + 
   geom_point() + 
   geom_abline()
 
@@ -60,13 +61,13 @@ df_test <- select(df_test, -rf_pred)
 
 
 # test model xgboost # 
-df_train_xg <- select(df_train, -subs_value)
-df_test_xg <- select(df_test, -subs_value)
+df_train_xg <- select(df_train, -subs_value_dl)
+df_test_xg <- select(df_test, -subs_value_dl)
 
 cv <-
   xgb.cv(
     data = as.matrix(df_train_xg),
-    label = df_train$subs_value,
+    label = df_train$subs_value_dl,
     nrounds = 100,
     nfold = 5,
     objective = "reg:linear",
@@ -83,7 +84,7 @@ elog %>%
             ntrees.test  = which.min(test_rmse_mean)) 
 
 subs_model_xgb <- xgboost(data = as.matrix(df_train_xg),
-                          label = df_train$subs_value,
+                          label = df_train$subs_value_dl,
                           nrounds = 15,
                           objective = "reg:linear",
                           eta = 0.3,
@@ -93,10 +94,10 @@ subs_model_xgb <- xgboost(data = as.matrix(df_train_xg),
 df_test$xgb_pred <- predict(subs_model_xgb, as.matrix(df_test_xg))
 
 
-mutate(df_test, residual = subs_value - xgb_pred) %>% 
+mutate(df_test, residual = subs_value_dl - xgb_pred) %>% 
   summarise(rmse = sqrt(mean(residual ^2)))
 
-ggplot(df_test, aes(x = xgb_pred, y = subs_value)) + 
+ggplot(df_test, aes(x = xgb_pred, y = subs_value_dl)) + 
   geom_point() + 
   geom_abline()
 
@@ -104,13 +105,15 @@ ggplot(df_test, aes(x = xgb_pred, y = subs_value)) +
 df_test$rf_pred <- rf_pred 
 
 # check both models #
-mutate(df_test, residual_rf = subs_value - rf_pred,
-       residual_xgb = subs_value - xgb_pred) %>% 
+mutate(df_test, residual_rf = subs_value_dl - rf_pred,
+       residual_xgb = subs_value_dl - xgb_pred) %>% 
   summarise(rmse_rf = sqrt(mean(residual_rf ^2)),
             rmse_xgb = sqrt(mean(residual_xgb ^2)))
 
 
 # Models with caret -------------------------------------------------------
+
+my_folds <- createFolds(df_train$subs_value_dl, k = 5)
 
 # glmnet #
 fit_control <- trainControl(
@@ -121,10 +124,11 @@ fit_control <- trainControl(
     method = "BT",
     complete = TRUE
   ),
-  number = 5,
   repeats = 3,
   search = "random",
   verboseIter = TRUE,
+  savePredictions = TRUE,
+  index = my_folds,
   allowParallel = TRUE
  )
 
@@ -136,7 +140,7 @@ glmnet_grid <- expand.grid(
 
 tic()
 glmnet_model <- train(
-  subs_value ~ ., 
+  subs_value_dl ~ ., 
   data = df_train,
   method = "glmnet",
   preProcess = "pca",
@@ -148,7 +152,7 @@ toc()
 # rndom forrest #
 tic()
 rf_model <- train(
-  subs_value ~ ., 
+  subs_value_dl ~ ., 
   data = df_train,
   method = "ranger",
   tuneLength = 100,
@@ -159,7 +163,7 @@ toc()
 # gradient boosting machine #
 tic()
 gbm_model <- train(
-  subs_value ~ ., 
+  subs_value_dl ~ ., 
   data = df_train,
   method = "gbm",
   tuneLength = 300,
@@ -189,14 +193,24 @@ xgb_control <- trainControl(
 
 tic()
 xgb_model <- train(
-  subs_value ~ ., 
+  subs_value_dl ~ ., 
   data = as.matrix(df_train),
   method = "xgbTree",
   tuneLength = 300,
-  trControl = xgb_control
+  trControl = fit_control
 )
 toc()
 
+# comparing #
+model_list <- list(glmnet = glmnet_model, rf = rf_model, gbm = gbm_model, xgb = xgb_model)
+
+resamps <- resamples(model_list)
+
+summary(resamps)
+
+
+dotplot(resamps, metric = "RMSE")
+bwplot(resamps, metric = "RMSE")
 
 
 # AutoML With H20 ---------------------------------------------------------
