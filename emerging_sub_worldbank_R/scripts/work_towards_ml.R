@@ -13,7 +13,7 @@ df <- read_rds("data/modified/compact_data.rds") %>%
   select(-subs_value) # temporary 
 
 # Cleaning data for feature table #   
-df <- select(df, -SUBID:-Concentration, -valid_measurement, -sub_groups)
+df <- select(df, -SUBID:-Concentration, -valid_measurement, -sub_groups, -censored)  # -subs_value, -censored
 
 # first test removing all missing values (for now) #
 df <- na.omit(df)
@@ -53,7 +53,8 @@ mutate(df_test, residual = subs_value_dl - rf_pred) %>%
 # plot model performance
 ggplot(df_test, aes(x = rf_pred, y = subs_value_dl)) + 
   geom_point() + 
-  geom_abline()
+  geom_abline() +
+  labs(x ="prediction_rf", y ="concentration (μg/l)")
 
 rf_pred <- df_test$rf_pred
 df_test <- select(df_test, -rf_pred)
@@ -99,7 +100,8 @@ mutate(df_test, residual = subs_value_dl - xgb_pred) %>%
 
 ggplot(df_test, aes(x = xgb_pred, y = subs_value_dl)) + 
   geom_point() + 
-  geom_abline()
+  geom_abline() +
+  labs(x ="prediction_xgb", y ="concentration (μg/l)")
 
 
 df_test$rf_pred <- rf_pred 

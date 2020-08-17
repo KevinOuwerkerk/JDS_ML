@@ -198,8 +198,8 @@ data$sub_groups <- case_when(data$reach_bin == 1 ~ "reach",
 
 # Obtaining emissions data ------------------------------------------------
 
-emission_files <- list.files(path = "data/raw/emission-data/", pattern = "*.dbg", full.names = TRUE)
-
+emission_files <- list.files(path = "data/raw/emission-data/", pattern ="*(.mes|.dbg)", full.names = TRUE)
+ 
 emission_data <- NULL
 
 # file <- "data/raw/emission-data/espaceCAS_100-41-4.dbg"
@@ -228,7 +228,13 @@ emission_data <- bind_rows(emission_data, df)
 }
 
 # cleaning and joining emission data #
-emission_data <- select(emission_data, country_nr, cas, emission_air_raw:emission_soil_raw)
+emission_data <- select(emission_data, country_nr, cas, emission_air_raw:emission_soil_raw) %>% 
+  group_by(country_nr, cas) %>% 
+  summarise(emission_air_raw = mean(emission_air_raw, na.rm = TRUE),
+            emission_water_raw = mean(emission_water_raw, na.rm = TRUE),
+            emission_ww_raw =  mean(emission_ww_raw, na.rm = TRUE),
+            emission_soil_raw = mean(emission_soil_raw, na.rm = TRUE)) %>% 
+  ungroup()
 
 data <- left_join(data, emission_data, by = c("country_nr" = "country_nr" , "CAS_No" = "cas"))
 
