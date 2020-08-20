@@ -49,11 +49,11 @@ vars_by_NAs <- epa_subs %>%
   sort(decreasing = FALSE) %>% 
   names()
 
-epa_subs %>%
-  select(all_of(vars_by_NAs)) %>%
-  kNN(k = 5)
+# epa_subs %>%
+#   select(all_of(vars_by_NAs)) %>%
+#   kNN(k = 5)
 
-epa_subs <- missForest(as.data.frame(epa_subs),variablewise = TRUE)
+epa_subs <- missForest(as.data.frame(epa_subs), variablewise = TRUE)
 
 #order missing vars
 subs_data <- left_join(mod_subs, epa_subs)

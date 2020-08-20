@@ -113,6 +113,30 @@ data_tot <-
   left_join(sub_props, by = c("CAS_No" = "CAS")) %>% 
   left_join(sub_groups, by = c("CAS_No" = "CAS"))
 
+subs_out <-
+  c(
+    "14798-03-9",
+    "7440-38-2",
+    "16887-00-6",
+    "7440-47-3",
+    "7440-50-8",
+    "64-85-7",
+    "7439-92-1",
+    "7439-95-4",
+    "7439-97-6",
+    "7440-02-0",
+    "7697-37-2",
+    "14797-65-0",
+    "17778-88-0",
+    "7723-14-0",
+    "7440-09-7",
+    "7440-23-5",
+    "14808-79-8",
+    "7440-66-6",
+    "7440-70-2",
+    "7440-43-9"
+  )
+
 data <- data_tot %>%
   select(
     HAROID,
@@ -158,24 +182,26 @@ data <- data_tot %>%
     frac_GDPEP,
     distance_t,
     CumAreakkm2
-  ) %>% 
-   mutate(  # recalculating units to one standard #
-     subs_value = case_when(
-       H_Unit == "mg/l" ~ subs_value * 1000,
-       H_Unit == "mg/kg" ~ subs_value * 1000,
+  ) %>%
+  mutate(
+    # recalculating units to one standard #
+    subs_value = case_when(
+      H_Unit == "mg/l" ~ subs_value * 1000,
+      H_Unit == "mg/kg" ~ subs_value * 1000,
       TRUE ~ subs_value
     ),
     H_Unit = case_when(H_Unit == "mg/l" ~ "µg/l",
                        H_Unit == "mg/kg" ~ "µg/kg",
                        TRUE ~ H_Unit)
-  ) %>% 
-  filter(H_Unit != "µg/kg")
+  ) %>%
+  filter(H_Unit != "µg/kg", !CAS_No %in% subs_out)
 
 # removing missing measurement
 data <- data[!is.na(data$subs_value), ]
 
 # calculate fraction agricultural are for each subid #
-data <- mutate(data, f_agr = area_agr / AREA)
+data <- mutate(data, f_agr = area_agr / AREA,
+               SUBID = as.character(SUBID))
 
 # adding flag for substances that belong to multiple groups
 data$mult_groups <- rowSums(data[,c('reach', 'pharma', 'pest')], na.rm = TRUE)
@@ -247,6 +273,45 @@ emission_data <- select(emission_data, country_nr, cas, emission_air_raw:emissio
 
 data <- left_join(data, emission_data, by = c("country_nr" = "country_nr" , "CAS_No" = "cas"))
 
+
+# test imputation emission data # #######
+data_names <-
+  select(
+    data,
+    SUBID,
+    CAS_No,
+    GDPEP,
+    emission_air_raw,
+    emission_water_raw,
+    emission_ww_raw,
+    emission_soil_raw,
+    molw:vapore_pressure
+  ) %>% distinct() %>% is.na() %>%
+  colSums() %>%
+  sort(decreasing = FALSE) %>%
+  names()
+  
+
+data_imp <- select(data, data_names) %>% distinct() %>% VIM::kNN(
+  k = 5,
+  numFun = weighted.mean,
+  weightDist = TRUE,
+  imp_var = FALSE
+) %>%
+  select(-GDPEP)
+
+  
+data <-
+  select(data,
+         -emission_air_raw,
+         -emission_water_raw,
+         -emission_ww_raw,
+         -emission_soil_raw,
+         -molw:-vapore_pressure)
+
+data <- left_join(data, data_imp)
+############
+
 # calculating emissions based on substance group # 
 data <- mutate(
   data,
@@ -272,7 +337,7 @@ data <- mutate(
   data,
   Concentration = if_else(subs_value == 0,
                           "Less than LoD",
-                          Concentration, missing =  Concentration)
+                          Concentration, missing = Concentration)
 )
 
 # Impute censored data ----------------------------------------------------
