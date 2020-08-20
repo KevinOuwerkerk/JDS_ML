@@ -196,6 +196,15 @@ data$sub_groups <- case_when(data$reach_bin == 1 ~ "reach",
                              data$pharma_bin == 1 ~ " pharma",
                              data$pest_bin == 1 ~ "pest")
 
+
+## test for epa substance properties ##
+data <- select(data, -kbiodeg:-ks)
+
+epa_props <- read_rds("data/modified/subs_data.rds")
+
+data <- left_join(data, epa_props, by = c("CAS_No" = "CAS"))
+##  ##
+
 # Obtaining emissions data ------------------------------------------------
 
 emission_files <- list.files(path = "data/raw/emission-data/", pattern ="*(.mes|.dbg)", full.names = TRUE)
