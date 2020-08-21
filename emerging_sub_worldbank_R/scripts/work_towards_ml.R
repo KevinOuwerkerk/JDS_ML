@@ -17,6 +17,7 @@ df <- select(df, -SUBID:-Concentration, -valid_measurement, -sub_groups, -censor
 
 # first test removing all missing values (for now) #
 df <- na.omit(df)
+# df$subs_value_dl <- log(df$subs_value_dl + 0.00000001)  # test with log data
 
 # create test and training data #
 set.seed(1234)
@@ -116,7 +117,6 @@ mutate(df_test, residual_rf = subs_value_dl - rf_pred,
 # Models with caret -------------------------------------------------------
 
 my_folds <- createFolds(df_train$subs_value_dl, k = 5)
-
 # glmnet #
 fit_control <- trainControl(
   method = "adaptive_cv",

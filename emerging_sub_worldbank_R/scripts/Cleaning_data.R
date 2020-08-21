@@ -333,12 +333,27 @@ data <- mutate(
   )
 )
 
+# collect lowest detection limits per substance #
+dls <- filter(data, Concentration == "Less than LoD") %>%
+  group_by(CAS_No) %>%
+  summarise(lowest_dl = min(subs_value, na.rm = TRUE)) %>% 
+  ungroup()
+
+data <- left_join(data, dls)
+
 data <- mutate(
   data,
   Concentration = if_else(subs_value == 0,
                           "Less than LoD",
-                          Concentration, missing = Concentration)
-)
+                          Concentration, missing = Concentration),
+  subs_value = if_else(
+    subs_value == 0 & !is.na(lowest_dl),
+    lowest_dl,
+    subs_value,
+    missing = subs_value
+  )
+) %>% select(-lowest_dl)
+
 
 # Impute censored data ----------------------------------------------------
 unique(data$Concentration)

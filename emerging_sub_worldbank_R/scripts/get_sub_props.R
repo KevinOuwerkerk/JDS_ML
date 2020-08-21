@@ -52,8 +52,10 @@ vars_by_NAs <- epa_subs %>%
 # epa_subs %>%
 #   select(all_of(vars_by_NAs)) %>%
 #   kNN(k = 5)
+cl <- parallel::makeCluster(4)
+doParallel::registerDoParallel(cores = cl)
+epa_subs_imp <- missForest(as.data.frame(epa_subs[, -1]), variablewise = TRUE, parallelize = "variables")
 
-epa_subs <- missForest(as.data.frame(epa_subs), variablewise = TRUE)
 
 #order missing vars
 subs_data <- left_join(mod_subs, epa_subs)
@@ -66,12 +68,15 @@ vars_by_NAs <- select(subs_data, -CAS) %>%
   sort(decreasing = FALSE) %>% 
   names()
 
-subs_data <- subs_data %>%
-  select(all_of(vars_by_NAs)) %>%
-  kNN(k = 5,
-      numFun = weighted.mean,
-      weightDist = TRUE) %>% 
-  select(-molw_imp:-vapore_pressure_imp)
+# subs_data <- subs_data %>%
+#   select(all_of(vars_by_NAs)) %>%
+#   kNN(k = 5,
+#       numFun = weighted.mean,
+#       weightDist = TRUE) %>% 
+#   select(-molw_imp:-vapore_pressure_imp)
+
+
+
 
 
 
